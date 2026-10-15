@@ -7,6 +7,7 @@
 
 [![ESP32-C3](https://img.shields.io/badge/target-ESP32--C3-18a558?logo=espressif&logoColor=white)](https://www.espressif.com/en/products/socs/esp32-c3)
 [![ESP-IDF 5.3](https://img.shields.io/badge/ESP--IDF-5.3-e7352c?logo=espressif&logoColor=white)](https://github.com/espressif/esp-idf)
+[![ESP-IDF build](https://github.com/Lendlav/esp32_electronic_load/actions/workflows/build.yml/badge.svg)](https://github.com/Lendlav/esp32_electronic_load/actions/workflows/build.yml)
 [![FreeRTOS](https://img.shields.io/badge/FreeRTOS-100%20Hz-168aad)](https://www.freertos.org/)
 [![LVGL](https://img.shields.io/badge/LVGL-8.3-7b2cbf)](https://lvgl.io/)
 [![License](https://img.shields.io/badge/license-CC0%20%2F%20Public%20Domain-blue)](LICENSE)

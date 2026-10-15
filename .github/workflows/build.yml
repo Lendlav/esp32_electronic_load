@@ -1,0 +1,51 @@
+name: ESP-IDF build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: esp-idf-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build ESP32-C3 firmware
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Build firmware with ESP-IDF 5.3
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v5.3
+          target: esp32c3
+          path: .
+          command: >-
+            idf.py build &&
+            esptool.py --chip esp32c3 merge_bin
+            -o build/electronic_load_esp32c3_full.bin
+            --flash_mode dio --flash_freq 80m --flash_size 4MB
+            0x0 build/bootloader/bootloader.bin
+            0x8000 build/partition_table/partition-table.bin
+            0x10000 build/electronic_load.bin
+
+      - name: Upload firmware artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: electronic-load-esp32c3-${{ github.sha }}
+          if-no-files-found: error
+          retention-days: 30
+          path: |
+            build/electronic_load.bin
+            build/electronic_load_esp32c3_full.bin
+            build/bootloader/bootloader.bin
+            build/partition_table/partition-table.bin
+            build/flasher_args.json
