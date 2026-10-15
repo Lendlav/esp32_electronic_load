@@ -1,0 +1,10 @@
+menu "Electronic load"
+
+config LOAD_WIFI_DIAGNOSTIC_MODE
+    bool "Start Wi-Fi AP without load hardware"
+    default n
+    help
+        Skip I2C, INA219, PWM, buttons and display initialization so the
+        access point can be checked on a bare ESP32 board.
+
+endmenu

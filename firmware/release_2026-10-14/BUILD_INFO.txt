@@ -1,0 +1,11 @@
+Project: electronic_load
+Target: ESP32-C3
+Flash: 4 MB, DIO, 80 MHz
+ESP-IDF: 5.3
+esptool: 4.11.0
+Build date: 2026-10-14
+Image layout:
+  0x0000  bootloader.bin
+  0x8000  partition-table.bin
+  0x10000 electronic_load.bin
+The merged image electronic_load_esp32c3_full.bin is written at 0x0000.

@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Electronic load</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #101820;
+      color: #e9f1f5;
+      font: 16px system-ui, sans-serif;
+    }
+    .wrap { max-width: 760px; margin: auto; padding: 20px; }
+    h1 { font-size: 1.35rem; margin: 0 0 14px; }
+    .state { color: #91d5ff; margin-bottom: 14px; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+      gap: 10px;
+    }
+    .card { background: #1b2933; border-radius: 10px; padding: 13px; }
+    .label { color: #a9bdc9; font-size: .82rem; }
+    .value {
+      font-size: 1.35rem;
+      font-variant-numeric: tabular-nums;
+      margin-top: 4px;
+    }
+    .chart {
+      margin-top: 14px;
+      padding: 14px 14px 10px;
+      background: linear-gradient(145deg, #1b2933, #17232c);
+      border: 1px solid #2a3b46;
+      border-radius: 14px;
+      box-shadow: 0 8px 24px #0003;
+    }
+    .chart-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin: 0 2px 8px;
+    }
+    .chart-title { font-size: .9rem; color: #d8e6ed; }
+    .chart-live { font-size: .72rem; color: #78d6ad; }
+    .chart-controls {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 8px;
+    }
+    .sources { display: flex; gap: 6px; }
+    .sources button {
+      border: 1px solid #344954;
+      border-radius: 8px;
+      background: #15212a;
+      color: #9fb4bf;
+      padding: 6px 12px;
+      font: inherit;
+      font-size: .78rem;
+      cursor: pointer;
+    }
+    .sources button.active {
+      background: #173c50;
+      border-color: #328bb4;
+      color: #bdeaff;
+    }
+    .step-control {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      color: #9fb4bf;
+      font-size: .78rem;
+    }
+    .step-control select {
+      border: 1px solid #344954;
+      border-radius: 8px;
+      background: #15212a;
+      color: #d8e6ed;
+      padding: 6px 8px;
+      font: inherit;
+    }
+    .chart-live::before {
+      content: '';
+      display: inline-block;
+      width: 7px;
+      height: 7px;
+      background: #50d6a0;
+      border-radius: 50%;
+      margin-right: 6px;
+      box-shadow: 0 0 8px #50d6a0;
+    }
+    canvas { display: block; width: 100%; height: 150px; }
+    .foot {
+      display: flex;
+      justify-content: space-between;
+      color: #8299a6;
+      font-size: .72rem;
+      margin: 2px 2px 0;
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <h1>Электронная нагрузка</h1>
+    <div class="state" id="state">Подключение…</div>
+
+    <section class="grid" aria-label="Параметры нагрузки">
+      <div class="card"><div class="label">Режим / уставка</div><div class="value" id="mode">—</div></div>
+      <div class="card"><div class="label">Напряжение</div><div class="value" id="voltage">—</div></div>
+      <div class="card"><div class="label">Ток</div><div class="value" id="current">—</div></div>
+      <div class="card"><div class="label">Мощность</div><div class="value" id="power">—</div></div>
+      <div class="card"><div class="label">Энергия</div><div class="value" id="energy">—</div></div>
+      <div class="card"><div class="label">Время работы</div><div class="value" id="runtime">—</div></div>
+      <div class="card"><div class="label">PWM</div><div class="value" id="duty">—</div></div>
+    </section>
+
+    <section class="chart" aria-label="График измерений">
+      <div class="chart-head">
+        <span class="chart-title" id="chart-title">Мощность</span>
+        <span class="chart-live">Текущие данные</span>
+      </div>
+      <div class="chart-controls">
+        <div class="sources" role="group" aria-label="Источник графика">
+          <button class="active" data-source="power_w">Мощность</button>
+          <button data-source="voltage_v">Напряжение</button>
+          <button data-source="current_a">Ток</button>
+        </div>
+        <label class="step-control">Шаг
+          <select id="chart-step" aria-label="Временной шаг графика">
+            <option value="1">1 с</option>
+            <option value="2">2 с</option>
+            <option value="5">5 с</option>
+            <option value="10">10 с</option>
+          </select>
+        </label>
+      </div>
+      <canvas id="chart"></canvas>
+      <div class="foot">
+        <span id="chart-window">Накопление данных…</span>
+        <span id="chart-range">— W</span>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    // The page keeps up to five minutes of sampled data in the browser.
+    const chartSamples = [];
+    const sources = {
+      power_w: { name: 'Мощность', unit: 'W' },
+      voltage_v: { name: 'Напряжение', unit: 'V' },
+      current_a: { name: 'Ток', unit: 'A' },
+    };
+
+    let selectedSource = 'power_w';
+    let sampleStepSeconds = 1;
+    let bucketSum = 0;
+    let bucketCount = 0;
+
+    const canvas = document.querySelector('#chart');
+    const context = canvas.getContext('2d');
+
+    function clearGraph() {
+      chartSamples.length = 0;
+      bucketSum = 0;
+      bucketCount = 0;
+      drawGraph(0, false);
+    }
+
+    document.querySelectorAll('.sources button').forEach((button) => {
+      button.onclick = () => {
+        selectedSource = button.dataset.source;
+        clearGraph();
+        document.querySelectorAll('.sources button').forEach((candidate) => {
+          candidate.classList.toggle('active', candidate === button);
+        });
+        document.querySelector('#chart-title').textContent = sources[selectedSource].name;
+      };
+    });
+
+    document.querySelector('#chart-step').onchange = (event) => {
+      sampleStepSeconds = Number(event.target.value) || 1;
+      clearGraph();
+    };
+
+    function drawGraph(value, append = true) {
+      if (append) {
+        chartSamples.push(Math.max(0, Number(value) || 0));
+        if (chartSamples.length > 300) chartSamples.shift();
+      }
+
+      const displayedSeconds = Math.min(300 * sampleStepSeconds,
+                                        chartSamples.length * sampleStepSeconds);
+      const intervalLabel = displayedSeconds >= 60 && displayedSeconds % 60 === 0
+        ? `${displayedSeconds / 60} мин`
+        : `${displayedSeconds} с`;
+      document.querySelector('#chart-window').textContent = chartSamples.length
+        ? `Последние ${intervalLabel}`
+        : 'Накопление данных…';
+
+      const width = canvas.clientWidth;
+      const height = canvas.clientHeight;
+      const pixelRatio = devicePixelRatio || 1;
+      if (canvas.width !== Math.round(width * pixelRatio) ||
+          canvas.height !== Math.round(height * pixelRatio)) {
+        canvas.width = Math.round(width * pixelRatio);
+        canvas.height = Math.round(height * pixelRatio);
+      }
+
+      context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+      context.clearRect(0, 0, width, height);
+
+      const left = 38;
+      const right = 10;
+      const top = 8;
+      const bottom = 8;
+      const plotWidth = width - left - right;
+      const plotHeight = height - top - bottom;
+      const peak = Math.max(0.001, ...chartSamples);
+      const rawMaximum = peak * 1.15;
+      const unit = Math.pow(10, Math.floor(Math.log10(rawMaximum)));
+      const scaledMaximum = rawMaximum / unit;
+      const step = scaledMaximum <= 1 ? 1 : scaledMaximum <= 2 ? 2 : scaledMaximum <= 5 ? 5 : 10;
+      const maximum = step * unit;
+
+      document.querySelector('#chart-range').textContent =
+        `${maximum.toPrecision(2)} ${sources[selectedSource].unit}`;
+
+      context.font = '11px system-ui';
+      context.textAlign = 'right';
+      context.textBaseline = 'middle';
+      for (let index = 0; index <= 4; index++) {
+        const y = top + plotHeight * index / 4;
+        const label = maximum * (1 - index / 4);
+        context.beginPath();
+        context.setLineDash(index === 4 ? [] : [2, 5]);
+        context.strokeStyle = index === 4 ? '#40545f' : '#30424d';
+        context.moveTo(left, y);
+        context.lineTo(width - right, y);
+        context.stroke();
+        context.setLineDash([]);
+        context.fillStyle = '#8ba0ab';
+        context.fillText(label >= 10 ? label.toFixed(0) : label.toFixed(2), left - 7, y);
+      }
+
+      if (!chartSamples.length) return;
+
+      const points = chartSamples.map((sample, index) => [
+        left + plotWidth - (chartSamples.length - index) * plotWidth / 300,
+        top + plotHeight - sample / maximum * plotHeight,
+      ]);
+      const fill = context.createLinearGradient(0, top, 0, top + plotHeight);
+      fill.addColorStop(0, '#42c5ff55');
+      fill.addColorStop(1, '#42c5ff00');
+
+      context.beginPath();
+      context.moveTo(points[0][0], top + plotHeight);
+      points.forEach((point) => context.lineTo(point[0], point[1]));
+      context.lineTo(points[points.length - 1][0], top + plotHeight);
+      context.closePath();
+      context.fillStyle = fill;
+      context.fill();
+
+      context.beginPath();
+      points.forEach((point, index) => {
+        if (index === 0) context.moveTo(point[0], point[1]);
+        else context.lineTo(point[0], point[1]);
+      });
+      context.strokeStyle = '#4bc8ff';
+      context.lineWidth = 2.2;
+      context.lineJoin = 'round';
+      context.lineCap = 'round';
+      context.shadowColor = '#36baff88';
+      context.shadowBlur = 7;
+      context.stroke();
+      context.shadowBlur = 0;
+
+      const latest = points[points.length - 1];
+      context.beginPath();
+      context.arc(latest[0], latest[1], 3, 0, Math.PI * 2);
+      context.fillStyle = '#bcecff';
+      context.fill();
+    }
+
+    function formatValue(value, decimals = 3) {
+      return Number(value).toFixed(decimals);
+    }
+
+    async function refresh() {
+      try {
+        const response = await fetch('/api/status', { cache: 'no-store' });
+        if (!response.ok) throw new Error('status request failed');
+        const data = await response.json();
+
+        document.querySelector('#state').textContent = data.status;
+        document.querySelector('#mode').textContent =
+          `${data.mode} · ${formatValue(data.setpoint, 3)}`;
+        document.querySelector('#voltage').textContent = `${formatValue(data.voltage_v)} V`;
+        document.querySelector('#current').textContent = `${formatValue(data.current_a)} A`;
+        document.querySelector('#power').textContent = `${formatValue(data.power_w)} W`;
+        document.querySelector('#energy').textContent = `${formatValue(data.energy_wh, 4)} Wh`;
+
+        const runtime = Math.floor(data.runtime_seconds);
+        document.querySelector('#runtime').textContent =
+          `${String(Math.floor(runtime / 3600)).padStart(2, '0')}:` +
+          `${String(Math.floor(runtime / 60) % 60).padStart(2, '0')}:` +
+          `${String(runtime % 60).padStart(2, '0')}`;
+        document.querySelector('#duty').textContent =
+          `${formatValue(data.duty * 100, 2)} %`;
+
+        bucketSum += Math.max(0, Number(data[selectedSource]) || 0);
+        if (++bucketCount >= sampleStepSeconds) {
+          drawGraph(bucketSum / bucketCount);
+          bucketSum = 0;
+          bucketCount = 0;
+        }
+      } catch (error) {
+        document.querySelector('#state').textContent = 'Нет связи с устройством';
+      }
+    }
+
+    refresh();
+    setInterval(refresh, 1000);
+  </script>
+</body>
+</html>
