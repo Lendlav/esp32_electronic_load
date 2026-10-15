@@ -37,10 +37,14 @@ jobs:
             0x8000 build/partition_table/partition-table.bin
             0x10000 build/electronic_load.bin
 
+      - name: Get build date
+        id: build_date
+        run: echo "date=$(date -u +'%Y-%m-%d')" >> "$GITHUB_OUTPUT"
+
       - name: Upload firmware artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: electronic-load-esp32c3
+          name: electronic-load-esp32c3-${{ steps.build_date.outputs.date }}
           if-no-files-found: error
           retention-days: 30
           path: |
